@@ -1,60 +1,42 @@
-<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Bramble Boom! - ブランブルのボムバトル</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
-<style>
-  html,body{margin:0;padding:0;height:100%;background:#0c1426;overflow:hidden;}
-  *{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:none;}
-  .stage{position:fixed;inset:0;}
-  canvas{display:block;width:100%;height:100%;}
-  .topbtns{position:absolute;top:calc(8px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));display:flex;gap:8px;z-index:5;}
-  .iconbtn{width:44px;height:44px;border-radius:12px;border:2px solid rgba(255,255,255,0.5);background:rgba(20,30,55,0.55);color:#fff;font-size:20px;line-height:1;cursor:pointer;}
-  .iconbtn:active{background:rgba(255,210,58,0.7);color:#5a3a06;}
-  .touch{position:absolute;inset:0;pointer-events:none;z-index:4;}
-  .dpad{position:absolute;left:calc(12px + env(safe-area-inset-left));bottom:calc(12px + env(safe-area-inset-bottom));
-    width:min(38vmin,300px);height:min(38vmin,300px);display:grid;grid-template:1fr 1fr 1fr / 1fr 1fr 1fr;gap:4px;}
-  .dbtn{pointer-events:auto;border:none;border-radius:16px;background:rgba(255,255,255,0.22);color:#fff;
-    font:bold min(7vmin,46px) "Baloo 2",sans-serif;display:flex;align-items:center;justify-content:center;
-    border:2px solid rgba(255,255,255,0.35);backdrop-filter:blur(2px);}
-  .dbtn:active{background:rgba(255,210,58,0.75);color:#5a3a06;}
-  #btn-up{grid-area:1/2;} #btn-left{grid-area:2/1;} #btn-right{grid-area:2/3;} #btn-down{grid-area:3/2;}
-  .acts{position:absolute;right:calc(16px + env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom));}
-  .bombbtn{pointer-events:auto;width:min(30vmin,230px);height:min(30vmin,230px);border-radius:50%;
-    border:4px solid rgba(255,255,255,0.55);background:radial-gradient(circle at 32% 28%, #ff9a3c, #e8631e 70%);
-    color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-    box-shadow:0 6px 16px rgba(0,0,0,0.35);}
-  .bombbtn:active{transform:scale(0.94);background:radial-gradient(circle at 32% 28%, #ffd23a, #ef7a1e 70%);}
-  .bombbtn .ico{font-size:min(9vmin,64px);line-height:1;}
-  .bombbtn .lbl{font:800 min(4.4vmin,30px) "Baloo 2","Hiragino Maru Gothic ProN",sans-serif;}
-  .stage:fullscreen{background:#0c1426;}
-  .stage:fullscreen canvas{width:100%;height:100%;}
-</style>
-</head>
-<body>
-    <div class="stage" id="stage">
-      <canvas id="game"></canvas>
-      <div class="topbtns">
-        <button class="iconbtn" id="pauseBtn" title="ポーズ">&#10074;&#10074;</button>
-        <button class="iconbtn" id="muteBtn" title="ミュート">&#9834;</button>
-        <button class="iconbtn" id="fsBtn" title="全画面">&#9974;</button>
-      </div>
-      <div class="touch" id="touch">
-        <div class="dpad">
-          <button class="dbtn" id="btn-up">&#9650;</button>
-          <button class="dbtn" id="btn-left">&#9664;</button>
-          <button class="dbtn" id="btn-right">&#9654;</button>
-          <button class="dbtn" id="btn-down">&#9660;</button>
-        </div>
-        <div class="acts">
-          <button class="bombbtn" id="btn-bomb"><span class="ico">&#9899;</span><span class="lbl">ボム</span></button>
-        </div>
-      </div>
-    </div>
-<!--BUNDLE-->
-</body>
-</html>
+import { duckMusic, initAudioOnce, sfxPause, toggleMute } from './engine/audio.js';
+import { canvas, resize, stage } from './engine/canvas.js';
+import { startLoop } from './engine/loop.js';
+import { game } from './game/state.js';
+import { loadSave } from './game/flow.js';
+import { scenes } from './scenes/SceneManager.js';
+
+canvas.addEventListener('pointerdown', ()=>{
+  initAudioOnce();
+  if(game.state==='title'||(game.state==='battle'&&game.phase==='end')) game.oneShotStart=true;
+});
+const muteBtnEl=document.getElementById('muteBtn');
+if(muteBtnEl) muteBtnEl.addEventListener('click', ()=>{ initAudioOnce(); toggleMute(); });
+const pauseBtnEl=document.getElementById('pauseBtn');
+if(pauseBtnEl) pauseBtnEl.addEventListener('click', ()=>{
+  initAudioOnce();
+  if(game.state!=='battle') return;
+  if(game.paused){ game.paused=false; duckMusic(1); sfxPause(); }
+  else if(game.phase==='play'){ game.paused=true; game.pauseSel=0; duckMusic(0); sfxPause(); }
+});
+const fsBtnEl=document.getElementById('fsBtn');
+if(fsBtnEl) fsBtnEl.addEventListener('click', ()=>{
+  initAudioOnce();
+  if(document.fullscreenElement){ if(document.exitFullscreen) document.exitFullscreen(); }
+  else if(stage&&stage.requestFullscreen) stage.requestFullscreen();
+  else if(stage&&stage.webkitRequestFullscreen) stage.webkitRequestFullscreen();
+});
+if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener('resize', resize);
+
+const detBtnEl=document.getElementById('btn-detonate');
+if(detBtnEl&&typeof setInterval!=='undefined'){
+  const _iv=setInterval(()=>{
+    const p=game.fighters&&game.fighters[0];
+    detBtnEl.style.display=(game.state==='battle'&&p&&p.alive&&p.remote)?'flex':'none';
+  }, 150);
+  if(_iv&&_iv.unref) _iv.unref();   // don't keep a headless process alive
+}
+
+loadSave();
+scenes.set('title');
+resize();
+startLoop();
