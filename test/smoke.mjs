@@ -48,7 +48,7 @@ function assert(c,msg){ if(!c) throw new Error('assert failed: '+msg); }
 
 async function partA(){
   makeEnv();
-  const { STEP, DIFFICULTY } = await import('../src/core/constants.js');
+  const { STEP, DIFFICULTY, ENEMIES, BOSS_PLAYER_HEARTS } = await import('../src/core/constants.js');
   const { input } = await import('../src/core/input.js');
   const { game } = await import('../src/game/state.js');
   const { bget, bset } = await import('../src/game/board.js');
@@ -110,7 +110,8 @@ async function partA(){
   for(let i=0;i<240&&!acted;i++){ step(1); if(Math.abs(c.cx-cx0)+Math.abs(c.cy-cy0)>4||game.bombs.some(b=>b.owner===1)) acted=true; }
   assert(acted,'CPU moves or places a bomb');
 
-  // direct blast kills CPU -> player wins
+  // direct blast kills CPU -> player wins (freeze the brain so it can't wander off the tile)
+  c.cpu=false;
   game.bombs.length=0; game.blasts.length=0;
   game.blasts.push({cells:[{tx:c.tx,ty:c.ty,o:'c'}],t:0.3,max:0.3});
   step(3);
@@ -156,8 +157,109 @@ async function partA(){
   step(3);
   assert(game.phase==='end'&&game.winner===-1,'time up ends in a draw');
 
-  // render every theme and overlay state
-  for(const ti of [0,1,2]){
+  // enemy variety: each CPU is a distinct pest, player is not an enemy
+  game.save.cpuCount=3; flow.startMatch({seed:5});
+  assert(game.fighters.length===4,'player + 3 CPUs spawned');
+  assert(!game.fighters[0].pal.enemy,'player keeps a buddy palette');
+  const enames=[];
+  for(let i=1;i<4;i++){ const pl=game.fighters[i].pal;
+    assert(pl.enemy===true,'CPU '+i+' uses an enemy palette');
+    assert(typeof pl.shape==='string','enemy '+i+' has a draw shape');
+    enames.push(pl.name); }
+  assert(new Set(enames).size===enames.length,'CPU enemies are distinct ('+enames.join(',')+')');
+  assert(ENEMIES.length>=4,'enemy roster has variety');
+  scenes.render(); game.phase='play'; scenes.render();   // exercise drawCritter paths
+
+  // ---- new items: pierce / kick / remote ----
+  clearInput();
+  // pierce: blast passes through a line of soft blocks
+  game.save.cpuCount=1; flow.startMatch({seed:31}); game.phase='play';
+  for(const f of game.fighters) f.cpu=false;
+  const pp=game.fighters[0]; pp.fire=4; pp.pierce=true;
+  bset(1,1,' '); bset(2,1,'B'); bset(3,1,'B'); bset(4,1,' ');
+  pp.dropBomb();
+  const pb=game.bombs.find(b=>b.owner===0);
+  assert(pb&&pb.pierce===true,'bomb inherits pierce from its owner');
+  pb.t=0.01; step(2);
+  assert(bget(2,1)===' '&&bget(3,1)===' ','pierce blast clears two soft blocks in a line');
+
+  // non-pierce stops at the first soft block
+  flow.startMatch({seed:31}); game.phase='play'; for(const f of game.fighters) f.cpu=false;
+  const pn=game.fighters[0]; pn.fire=4; pn.pierce=false;
+  bset(1,1,' '); bset(2,1,'B'); bset(3,1,'B');
+  pn.dropBomb(); const nb=game.bombs.find(b=>b.owner===0); nb.t=0.01; step(2);
+  assert(bget(2,1)===' '&&bget(3,1)==='B','non-pierce blast stops at the first soft block');
+
+  // kick: walking into a bomb sends it sliding away
+  flow.startMatch({seed:41}); game.phase='play'; for(const f of game.fighters) f.cpu=false;
+  const pk=game.fighters[0];
+  for(let x=1;x<=8;x++) bset(x,1,' ');
+  pk.kick=true; pk.cx=2*16+8; pk.cy=1*16+8; pk.overBomb=null;
+  const kb=new E.Bomb(3,1,1,2,false,false); game.bombs.push(kb);
+  for(let i=0;i<26;i++){ pk.move(1,0,STEP); for(const b of game.bombs) b.update(STEP); }
+  assert(kb.tx>3,'kicked bomb slides away ('+kb.tx+')');
+
+  // remote: player bomb waits to be detonated; CPU bombs always fuse
+  flow.startMatch({seed:51}); game.phase='play'; for(const f of game.fighters) f.cpu=false;
+  const pr=game.fighters[0]; pr.remote=true; pr.hearts=5;
+  pr.dropBomb();
+  const rb=game.bombs.find(b=>b.owner===0);
+  assert(rb&&rb.remote===true,'player remote bomb is remote-controlled');
+  step(170);
+  assert(!rb.dead,'remote bomb does not explode on its own timer');
+  input.detonate=true; step(1); input.detonate=false; step(1);
+  assert(rb.dead,'remote bomb explodes when detonated');
+  const cf=new E.Fighter(2,5,5,ENEMIES[0]); cf.remote=true; cf.dropBomb();
+  const cb=game.bombs.find(b=>b.owner===2);
+  assert(cb&&cb.remote===false,'CPU bombs ignore remote and always fuse');
+  clearInput();
+
+  // ---- boss battle ----
+  clearInput();
+  flow.startMatch({boss:true, seed:7});
+  assert(game.bossMode===true,'boss mode flag set');
+  assert(game.boss&&game.boss.alive,'boss spawned');
+  assert(game.fighters.length===1,'boss mode: player only (no CPUs)');
+  assert(game.fighters[0].hearts===BOSS_PLAYER_HEARTS,'boss mode gives the player fixed hearts');
+  assert(game.themeIdx===4,'boss mode uses the magma world');
+  game.phase='play'; const bp=game.fighters[0]; bp.cpu=false;
+  bp.cx=1*16+8; bp.cy=1*16+8; bp.overBomb=null;   // keep the player out of the test blasts
+
+  const bo=game.boss;
+  // direct damage + invincibility window
+  bo.invinc=0; const hp0=bo.hp; bo.hit(); assert(bo.hp===hp0-1,'boss loses 1 HP when hit');
+  bo.hit(); assert(bo.hp===hp0-1,'boss is invincible right after being hit');
+  // player bomb damages the boss through the blast pipeline (3x3 footprint)
+  bo.invinc=0; const hp1=bo.hp;
+  const pbomb=new E.Bomb(bo.tx,bo.ty,0,3,false,false); game.bombs.push(pbomb); pbomb.t=0.01; step(2);
+  assert(bo.hp<hp1,'player bomb blast damages the boss');
+  // boss is immune to its own (owner 9) blast
+  game.blasts=[]; game.bombs=[]; bo.invinc=0; const hp2=bo.hp;
+  const ebomb=new E.Bomb(bo.tx,bo.ty,9,2,false,false); game.bombs.push(ebomb); ebomb.t=0.01; step(2);
+  assert(bo.hp===hp2,'boss is unharmed by its own blast');
+  // boss attacks
+  bo._dropBomb(); assert(game.bombs.some(b=>b.owner===9&&!b.dead),'boss drops an owner-9 bomb');
+  bo._slam(); assert(game.blasts.some(bl=>bl.owner===9),'boss slam creates an owner-9 blast');
+
+  // defeating the boss wins (after a short defeat sequence)
+  flow.startMatch({boss:true, seed:9}); game.phase='play'; game.fighters[0].cpu=false;
+  const bo2=game.boss; bo2.hp=1; bo2.invinc=0; bo2.hit();
+  assert(!bo2.alive,'boss dies at 0 HP');
+  step(2); assert(game.phase==='play','win waits for the defeat animation');
+  step(90); assert(game.phase==='end'&&game.winner===0,'defeating the boss wins the round');
+  scenes.render();   // exercise the clear celebration overlay
+
+  // losing all hearts loses the boss battle
+  flow.startMatch({boss:true, seed:11}); game.phase='play'; game.fighters[0].cpu=false;
+  const bpl=game.fighters[0]; bpl.hearts=1; bpl.invinc=0; bpl.hit();
+  step(2); assert(game.phase==='end'&&game.winner===1,'losing all hearts loses the boss battle');
+  // render boss-mode frames (battle + overlays)
+  flow.startMatch({boss:true, seed:13}); scenes.render(); game.phase='play'; scenes.render();
+  clearInput();
+
+  // render every world and overlay state
+  assert((await import('../src/core/constants.js')).THEMES.length===5,'5 worlds defined');
+  for(const ti of [0,1,2,3,4]){
     game.save.themeSel=ti; flow.startMatch({seed:5});
     scenes.render(); game.phase='play'; scenes.render();
     game.paused=true; scenes.render(); game.paused=false;
