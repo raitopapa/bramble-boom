@@ -26,10 +26,10 @@ const THEMES=[
    soft:'#e0562a',softTop:'#ff7a2a',softDark:'#9a3414',accent:'#ff8a1e'},
 ];
 const CHARS=[
-  {name:'ブランブル',body:'#ff9a3c',top:'#ffb869',shade:'#e8631e',belly:'#ffe6c2',out:'#8a3a16',cheek:'#ff8a5a',acc:'sprout',ring:'#ffd23a'},
-  {name:'ミント',body:'#5fce72',top:'#8ce6a0',shade:'#2fa14e',belly:'#e2ffe8',out:'#1d6e36',cheek:'#3fae5e',acc:'leaf',ring:'#7be06a'},
-  {name:'ソラ',body:'#5aa6ff',top:'#8cc4ff',shade:'#2f6fd6',belly:'#e0efff',out:'#1d4e9e',cheek:'#4a8ae6',acc:'drop',ring:'#7cc0ff'},
-  {name:'モモ',body:'#ff8ad2',top:'#ffb1e2',shade:'#e6589e',belly:'#ffe6f4',out:'#a83a76',cheek:'#ff6abf',acc:'flower',ring:'#ff9ad2'},
+  {name:'ブランブル',key:'bramble',power:'heart',tag:'タフ',tip:'ハートが 1こ おおい！',body:'#ff9a3c',top:'#ffc078',shade:'#e8631e',belly:'#fff0d8',out:'#8a3a16',cheek:'#ff7a62',acc:'sprout',ring:'#ffc23a'},
+  {name:'ミント',key:'mint',power:'speed',tag:'すばやい',tip:'うごきが はやい！',body:'#5fce72',top:'#93eca8',shade:'#2fa14e',belly:'#e6ffec',out:'#1d6e36',cheek:'#ff8fa6',acc:'leaf',ring:'#7be06a'},
+  {name:'ソラ',key:'sora',power:'bomb',tag:'ボムたくさん',tip:'ボムを 2こ おける！',body:'#5aa6ff',top:'#8cc6ff',shade:'#2f6fd6',belly:'#e6f2ff',out:'#1d4e9e',cheek:'#ff9ab0',acc:'drop',ring:'#7cc0ff'},
+  {name:'モモ',key:'momo',power:'fire',tag:'パワフル',tip:'ばくはつが おおきい！',body:'#ff8ad2',top:'#ffb3e4',shade:'#e6589e',belly:'#ffe9f6',out:'#a83a76',cheek:'#ff5fae',acc:'flower',ring:'#ff9ad2'},
 ];
 // Enemy "pests" — original designs, distinct silhouettes from the player buddies.
 // shape drives drawCritter(); the palette keys also feed drawFaceChip (enemy:true).

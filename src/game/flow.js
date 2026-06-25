@@ -17,6 +17,7 @@ function loadSave(){
     if(typeof d.difficulty==='number') game.save.difficulty=Math.max(0,Math.min(2,d.difficulty|0));
     if(typeof d.cpuCount==='number') game.save.cpuCount=Math.max(1,Math.min(3,d.cpuCount|0));
     if(typeof d.themeSel==='number') game.save.themeSel=Math.max(0,Math.min(5,d.themeSel|0));
+    if(typeof d.charSel==='number') game.save.charSel=Math.max(0,Math.min(CHARS.length-1,d.charSel|0));
     if(typeof d.w==='number') game.save.w=d.w|0;
     if(typeof d.l==='number') game.save.l=d.l|0;
   }catch(_){ }
@@ -24,6 +25,13 @@ function loadSave(){
 }
 function persistSave(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(game.save)); }catch(_){ } }
 
+function applyCharPower(f){
+  const p=f.pal&&f.pal.power;
+  if(p==='heart') f.hearts+=1;          // タフ：ハート+1
+  else if(p==='speed') f.spdMul=1.18;   // すばやい：はやく うごく
+  else if(p==='bomb') f.bombCap+=1;     // ボムたくさん：ボム+1
+  else if(p==='fire') f.fire+=1;        // パワフル：ばくはつ+1
+}
 function startMatch(opts){
   opts=opts||{};
   const seed=(opts.seed!=null?opts.seed:(Math.random()*1e9))|0;
@@ -34,8 +42,9 @@ function startMatch(opts){
   game.themeIdx=ti; game.theme=THEMES[ti];
   game.board=genBoard(rng);
   game.fighters=[]; game.boss=null;
+  const pchar=CHARS[Math.max(0,Math.min(CHARS.length-1,game.save.charSel|0))];
   if(game.bossMode){
-    const pf=new Fighter(0,1,1,CHARS[0]); pf.hearts=BOSS_PLAYER_HEARTS; game.fighters.push(pf);
+    const pf=new Fighter(0,1,1,pchar); pf.hearts=BOSS_PLAYER_HEARTS; applyCharPower(pf); pf.maxHearts=pf.hearts; game.fighters.push(pf);
     const bx=(COLS/2)|0, by=(ROWS/2)|0;
     for(let yy=by-1;yy<=by+1;yy++) for(let xx=bx-1;xx<=bx+1;xx++){ if(bget(xx,yy)==='B') bset(xx,yy,' '); }
     game.boss=new Boss(bx,by,BOSS);
@@ -46,10 +55,10 @@ function startMatch(opts){
     const epool=ENEMIES.map((_,k)=>k);
     for(let k=epool.length-1;k>0;k--){ const j=(rng()*(k+1))|0; const t=epool[k]; epool[k]=epool[j]; epool[j]=t; }
     for(let i=0;i<n;i++){
-      const pal = i===0 ? CHARS[0] : ENEMIES[epool[(i-1)%ENEMIES.length]];
+      const pal = i===0 ? pchar : ENEMIES[epool[(i-1)%ENEMIES.length]];
       const f=new Fighter(i,spawns[i][0],spawns[i][1],pal);
       if(i>0){ f.cpu=true; f.spdMul=game.diff.cpu.spd; }
-      else f.hearts=game.diff.hearts;
+      else { f.hearts=game.diff.hearts; applyCharPower(f); f.maxHearts=f.hearts; }
       game.fighters.push(f);
     }
   }

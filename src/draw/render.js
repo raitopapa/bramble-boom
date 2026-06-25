@@ -254,9 +254,10 @@ function drawHud(){
     if(p.kick&&ax+bsz<chipLeftB) ax=drawAbilityBadge(ax,cyy,'kick',bsz);
     if(p.pierce&&ax+bsz<chipLeftB) ax=drawAbilityBadge(ax,cyy,'pierce',bsz);
     if(p.remote&&ax+bsz<chipLeftB) ax=drawAbilityBadge(ax,cyy,'remote',bsz);
-    if(game.diff.hearts>1){
+    const mh=p.maxHearts||game.diff.hearts;
+    if(mh>1){
       const hx0=ax+r*0.4;
-      for(let i=0;i<game.diff.hearts;i++){
+      for(let i=0;i<mh;i++){
         const hx=hx0+i*r*1.05, on=i<p.hearts;
         ctx.fillStyle=on?'#ff5d6c':'rgba(255,255,255,0.25)';
         ctx.beginPath();
@@ -446,6 +447,63 @@ function drawClearCelebration(){
   ctx.fillStyle='rgba(90,30,60,0.5)'; ctx.fillText('クチキングを たおした！',W/2+2,H*0.40+2);
   ctx.fillStyle='#fff'; ctx.fillText('クチキングを たおした！',W/2,H*0.40);
 }
+function drawSelIcon(type,cx,cy,s){
+  if(type==='heart'){
+    ctx.fillStyle='#ff5d6c'; ctx.beginPath();
+    ctx.moveTo(cx,cy+s*0.5); ctx.bezierCurveTo(cx-s*0.7,cy-s*0.25,cx-s*0.2,cy-s*0.72,cx,cy-s*0.18);
+    ctx.bezierCurveTo(cx+s*0.2,cy-s*0.72,cx+s*0.7,cy-s*0.25,cx,cy+s*0.5); ctx.fill();
+  } else if(type==='speed'){
+    ctx.fillStyle='#ffd23a'; ctx.strokeStyle='#e8a01e'; ctx.lineWidth=s*0.1;
+    ctx.beginPath(); ctx.moveTo(cx+s*0.3,cy-s*0.6); ctx.lineTo(cx-s*0.35,cy+s*0.12); ctx.lineTo(cx-s*0.02,cy+s*0.12); ctx.lineTo(cx-s*0.25,cy+s*0.6); ctx.lineTo(cx+s*0.4,cy-s*0.1); ctx.lineTo(cx+s*0.05,cy-s*0.1); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if(type==='bomb'){
+    ctx.fillStyle='#2a3550'; ctx.beginPath(); ctx.arc(cx,cy+s*0.12,s*0.44,0,7); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.5)'; ellipse(cx-s*0.15,cy-s*0.02,s*0.13,s*0.09);
+    ctx.strokeStyle='#caa46a'; ctx.lineWidth=s*0.12; ctx.beginPath(); ctx.moveTo(cx,cy-s*0.3); ctx.quadraticCurveTo(cx+s*0.26,cy-s*0.58,cx+s*0.44,cy-s*0.42); ctx.stroke();
+    bStar(cx+s*0.48,cy-s*0.44,s*0.2,'#ffd23a','#ef7a1e');
+  } else if(type==='fire'){
+    ctx.fillStyle='#ff7a1a'; ctx.beginPath(); ctx.moveTo(cx,cy-s*0.62); ctx.quadraticCurveTo(cx+s*0.55,cy-s*0.05,cx+s*0.28,cy+s*0.46); ctx.quadraticCurveTo(cx,cy+s*0.62,cx-s*0.28,cy+s*0.46); ctx.quadraticCurveTo(cx-s*0.55,cy-s*0.05,cx,cy-s*0.62); ctx.fill();
+    ctx.fillStyle='#ffe04d'; ctx.beginPath(); ctx.moveTo(cx,cy-s*0.16); ctx.quadraticCurveTo(cx+s*0.22,cy+s*0.14,cx,cy+s*0.42); ctx.quadraticCurveTo(cx-s*0.22,cy+s*0.14,cx,cy-s*0.16); ctx.fill();
+  }
+}
+function renderSelect(sel){
+  const W=canvas.width,H=canvas.height,t=animClock;
+  drawBackdrop(THEMES[0]);
+  ctx.save(); ctx.globalAlpha=0.16; ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H); ctx.restore();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='bold '+Math.round(H*0.07)+'px '+FONT_R;
+  ctx.fillStyle='rgba(40,30,10,0.4)'; ctx.fillText('キャラを えらんでね！',W/2+2,H*0.115+2);
+  ctx.fillStyle='#fff'; ctx.fillText('キャラを えらんでね！',W/2,H*0.115);
+  const n=CHARS.length, gap=W*0.02, cw=W*0.2, ch=H*0.5, totalW=n*cw+(n-1)*gap, x0=(W-totalW)/2, yTop=H*0.24;
+  game.selRects=[];
+  for(let i=0;i<n;i++){
+    const pal=CHARS[i], x=x0+i*(cw+gap), y=yTop, on=i===sel;
+    game.selRects.push({x,y,w:cw,h:ch});
+    if(on){ const gl=8+Math.abs(Math.sin(t*4))*4; ctx.save(); ctx.globalAlpha=0.6; ctx.fillStyle=pal.ring; rr(ctx,x-gl,y-gl,cw+gl*2,ch+gl*2,20); ctx.fill(); ctx.restore(); }
+    ctx.fillStyle= on?'#ffffff':'rgba(255,255,255,0.6)'; rr(ctx,x,y,cw,ch,14); ctx.fill();
+    ctx.strokeStyle=pal.ring; ctx.lineWidth=on?6:2.5; rr(ctx,x,y,cw,ch,14); ctx.stroke();
+    if(on){ const py2=y-16-Math.abs(Math.sin(t*4))*9;
+      ctx.fillStyle=pal.ring; ctx.beginPath(); ctx.moveTo(x+cw/2-15,py2-16); ctx.lineTo(x+cw/2+15,py2-16); ctx.lineTo(x+cw/2,py2); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2.5; ctx.stroke(); }
+    const bounce= on?Math.abs(Math.sin(t*3))*ch*0.05:0;
+    drawBuddy(x+cw/2, y+ch*0.56-bounce, ch*0.36, pal, {dirX:0, walk: on?t*6:0, blink:false});
+    ctx.font='bold '+Math.round(ch*0.11)+'px '+FONT_R; ctx.fillStyle=pal.shade; ctx.textAlign='center';
+    ctx.fillText(pal.name, x+cw/2, y+ch*0.74);
+    const pillW=cw*0.88, pillH=ch*0.15, px=x+cw/2-pillW/2, py=y+ch*0.81;
+    ctx.fillStyle=pal.ring; rr(ctx,px,py,pillW,pillH,pillH*0.5); ctx.fill();
+    drawSelIcon(pal.power, px+pillH*0.62, py+pillH*0.5, pillH*0.5);
+    ctx.font='bold '+Math.round(ch*0.07)+'px '+FONT_R; ctx.fillStyle='#3a2a10'; ctx.textAlign='left';
+    ctx.fillText(pal.tag, px+pillH*1.1, py+pillH*0.5);
+    ctx.textAlign='center';
+  }
+  const psel=CHARS[sel];
+  ctx.font='bold '+Math.round(H*0.045)+'px '+FONT_R;
+  ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillText(psel.tip, W/2+2, H*0.845+2);
+  ctx.fillStyle='#fff'; ctx.fillText(psel.tip, W/2, H*0.845);
+  if(Math.floor(t*2)%2===0){
+    ctx.font=Math.round(H*0.034)+'px '+FONT_R; ctx.fillStyle='#ffe9b0';
+    ctx.fillText('タップ／ボムボタンで けってい！  ◀▶ で えらぶ', W/2, H*0.93);
+  }
+}
 function renderTitle(row){
   const W=canvas.width,H=canvas.height,th=THEMES[0];
   drawBackdrop(th);
@@ -496,4 +554,4 @@ function renderTitle(row){
   ctx.fillText('せんせき かち'+game.save.w+'・まけ'+game.save.l,W*0.98,H*0.05);
   drawRotateHint();
 }
-export { drawBombAt, renderBattle, renderTitle };
+export { drawBombAt, renderBattle, renderSelect, renderTitle };

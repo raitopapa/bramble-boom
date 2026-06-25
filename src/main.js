@@ -5,9 +5,11 @@ import { game } from './game/state.js';
 import { loadSave } from './game/flow.js';
 import { scenes } from './scenes/SceneManager.js';
 
-canvas.addEventListener('pointerdown', ()=>{
+canvas.addEventListener('pointerdown', (e)=>{
   initAudioOnce();
-  if(game.state==='title'||(game.state==='battle'&&game.phase==='end')) game.oneShotStart=true;
+  const r=canvas.getBoundingClientRect && canvas.getBoundingClientRect();
+  if(r && r.width){ const dpr=canvas.width/r.width; game.tapX=(e.clientX-r.left)*dpr; game.tapY=(e.clientY-r.top)*dpr; }
+  if(game.state==='title'||game.state==='select'||(game.state==='battle'&&game.phase==='end')) game.oneShotStart=true;
 });
 const muteBtnEl=document.getElementById('muteBtn');
 if(muteBtnEl) muteBtnEl.addEventListener('click', ()=>{ initAudioOnce(); toggleMute(); });
@@ -26,6 +28,15 @@ if(fsBtnEl) fsBtnEl.addEventListener('click', ()=>{
   else if(stage&&stage.webkitRequestFullscreen) stage.webkitRequestFullscreen();
 });
 if(typeof window!=='undefined'&&window.addEventListener) window.addEventListener('resize', resize);
+
+const detBtnEl=document.getElementById('btn-detonate');
+if(detBtnEl&&typeof setInterval!=='undefined'){
+  const _iv=setInterval(()=>{
+    const p=game.fighters&&game.fighters[0];
+    detBtnEl.style.display=(game.state==='battle'&&p&&p.alive&&p.remote)?'flex':'none';
+  }, 150);
+  if(_iv&&_iv.unref) _iv.unref();   // don't keep a headless process alive
+}
 
 loadSave();
 scenes.set('title');

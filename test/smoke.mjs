@@ -48,7 +48,7 @@ function assert(c,msg){ if(!c) throw new Error('assert failed: '+msg); }
 
 async function partA(){
   makeEnv();
-  const { STEP, DIFFICULTY, ENEMIES, BOSS_PLAYER_HEARTS } = await import('../src/core/constants.js');
+  const { STEP, DIFFICULTY, ENEMIES, BOSS_PLAYER_HEARTS, CHARS, START_FIRE } = await import('../src/core/constants.js');
   const { input } = await import('../src/core/input.js');
   const { game } = await import('../src/game/state.js');
   const { bget, bset } = await import('../src/game/board.js');
@@ -127,6 +127,7 @@ async function partA(){
   assert(game.phase==='count','rematch starts');
 
   // player death on normal -> CPU wins
+  game.save.charSel=1;   // ミント = no heart bonus → clean 1-heart baseline
   flow.startMatch({seed:7}); game.phase='play';
   const p2=game.fighters[0];
   game.blasts.push({cells:[{tx:p2.tx,ty:p2.ty,o:'c'}],t:0.3,max:0.3});
@@ -255,6 +256,29 @@ async function partA(){
   step(2); assert(game.phase==='end'&&game.winner===1,'losing all hearts loses the boss battle');
   // render boss-mode frames (battle + overlays)
   flow.startMatch({boss:true, seed:13}); scenes.render(); game.phase='play'; scenes.render();
+  clearInput();
+
+  // ---- character select + powers ----
+  clearInput();
+  const charTests=[
+    {sel:0, key:'bramble', check:p=>p.hearts===game.diff.hearts+1 && p.maxHearts===p.hearts},
+    {sel:1, key:'mint',    check:p=>p.spdMul>1},
+    {sel:2, key:'sora',    check:p=>p.bombCap===2},
+    {sel:3, key:'momo',    check:p=>p.fire===START_FIRE+1},
+  ];
+  for(const c of charTests){
+    game.save.charSel=c.sel; flow.startMatch({seed:3});
+    const p=game.fighters[0];
+    assert(p.pal.key===c.key,'player is character '+c.key);
+    assert(c.check(p),'character power applied: '+c.key);
+  }
+  // select screen lays out one card per character, confirm starts the battle
+  game.state='title'; scenes.update(STEP);
+  game.pendingBoss=false; game.save.charSel=2; game.state='select'; scenes.update(STEP); scenes.render();
+  assert(game.selRects&&game.selRects.length===CHARS.length,'select screen has a card per character');
+  input.bomb=true; scenes.update(STEP); input.bomb=false;
+  assert(game.state==='battle','confirming a character starts the battle');
+  assert(game.fighters[0].pal.key==='sora','battle uses the confirmed character');
   clearInput();
 
   // render every world and overlay state

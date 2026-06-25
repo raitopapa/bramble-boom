@@ -19,7 +19,7 @@ class TitleScene{
     }
     else if(edge.bomb||edge.start||game.oneShotStart){
       game.oneShotStart=false; sfxCoin(); persistSave();
-      startMatch(this.row===4?{boss:true}:{});
+      game.pendingBoss=(this.row===4); game.state='select';
     }
     inputEnd();
   }
