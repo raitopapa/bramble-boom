@@ -94,6 +94,8 @@ function setMusicTrack(name){
   if(audioReady && AC) loopStartTime=AC.currentTime+0.1;
 }
 const ntf = n=> 440*Math.pow(2,(n-69)/12);
+let musRate=1;
+function setMusicRate(r){ musRate=r||1; }
 function startMusic(){
   if(!audioReady||musicTimer) return;
   buildSeq(curTrack); loopStartTime=AC.currentTime+0.12; schedIdx=0;
@@ -101,7 +103,8 @@ function startMusic(){
     if(!musicOn||!audioReady) return;
     const ahead=0.2;
     for(let guard=0; guard<64; guard++){
-      const ev=seqArr[schedIdx]; const et=loopStartTime+ev.t*SPB;
+      const spbNow=SPB/musRate;
+      const ev=seqArr[schedIdx]; const et=loopStartTime+ev.t*spbNow;
       if(et < AC.currentTime+ahead){
         const o=AC.createOscillator(), g=AC.createGain();
         o.type = ev.voice==='lead'?'square':'triangle';
@@ -109,12 +112,12 @@ function startMusic(){
         const peak = ev.voice==='lead'?0.16:0.2;
         g.gain.setValueAtTime(0.0001,et);
         g.gain.linearRampToValueAtTime(peak, et+0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, et+ev.dur*SPB);
-        o.connect(g); g.connect(musicGain); o.start(et); o.stop(et+ev.dur*SPB+0.05);
-        schedIdx++; if(schedIdx>=seqArr.length){ schedIdx=0; loopStartTime+=loopBeats*SPB; }
+        g.gain.exponentialRampToValueAtTime(0.0001, et+ev.dur*spbNow);
+        o.connect(g); g.connect(musicGain); o.start(et); o.stop(et+ev.dur*spbNow+0.05);
+        schedIdx++; if(schedIdx>=seqArr.length){ schedIdx=0; loopStartTime+=loopBeats*spbNow; }
       } else break;
     }
   },30);
 }
 
-export { AC, SPB, audioReady, blip, buildSeq, duckMusic, initAudioOnce, loopBeats, loopStartTime, master, musicGain, musicOn, musicTimer, muted, noiseBurst, ntf, schedIdx, seq, seqArr, setMusicTrack, sfx1up, sfxBat, sfxBreak, sfxBump, sfxClear, sfxCoin, sfxCrumble, sfxDie, sfxFire, sfxFlag, sfxFlagDn, sfxGain, sfxJump, sfxKick, sfxPause, sfxPowerup, sfxShrink, sfxSpring, sfxSprout, sfxStomp, sfxTick, sfxWin, startMusic, toggleMute };
+export { AC, SPB, setMusicRate, musRate, TRACKS, audioReady, blip, buildSeq, curTrack, duckMusic, initAudioOnce, loopBeats, loopStartTime, master, musicGain, musicOn, musicTimer, muted, noiseBurst, ntf, schedIdx, seq, seqArr, setMusicTrack, sfx1up, sfxBat, sfxBreak, sfxBump, sfxClear, sfxCoin, sfxCrumble, sfxDie, sfxFire, sfxFlag, sfxFlagDn, sfxGain, sfxJump, sfxKick, sfxPause, sfxPowerup, sfxShrink, sfxSpring, sfxSprout, sfxStomp, sfxTick, sfxWin, startMusic, toggleMute };

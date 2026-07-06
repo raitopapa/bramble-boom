@@ -2,7 +2,7 @@ import { BLAST_T, FUSE_T, ITEM_RATE, MAX_BOMBS, MAX_FIRE, MAX_SPEED, START_FIRE,
 import { rand } from '../core/utils.js';
 import { game } from './state.js';
 import { bget, bombAt, bset, itemAt } from './board.js';
-import { sfxBoom, sfxPick, sfxPlaceBomb } from '../engine/sfx2.js';
+import { sfxBoom, sfxKO, sfxPick, sfxPlaceBomb } from '../engine/sfx2.js';
 import { sfxShrink } from '../engine/audio.js';
 
 class Fighter{
@@ -11,14 +11,14 @@ class Fighter{
     this.cx=tx*TILE+TILE/2; this.cy=ty*TILE+TILE/2; this.r=5.2;
     this.alive=true; this.hearts=1; this.maxHearts=1; this.invinc=0;
     this.bombCap=1; this.fire=START_FIRE; this.speedUps=0; this.spdMul=1;
-    this.kick=false; this.pierce=false; this.remote=false;
+    this.kick=false; this.pierce=false; this.remote=false; this.wallpass=false; this.bombpass=false;
     this.dirX=0; this.dirY=1; this.walk=0; this.blinkT=rand(1,4); this.blink=false;
     this.squash=0; this.overBomb=null; this.cpu=false;
     this.aiT=rand(0,0.2); this.path=null; this.wantBomb=false; this.wdir=null;
   }
   get tx(){ return Math.floor(this.cx/TILE); }
   get ty(){ return Math.floor(this.cy/TILE); }
-  canPass(tx,ty){ if(bget(tx,ty)!==' ') return false; const b=bombAt(tx,ty); if(b&&b!==this.overBomb) return false; return true; }
+  canPass(tx,ty){ const ch=bget(tx,ty); if(ch==='#') return false; if(ch==='B'&&!this.wallpass) return false; const b=bombAt(tx,ty); if(b&&b!==this.overBomb&&!this.bombpass) return false; return true; }
   _axis(ax,dv,assist){
     if(!dv) return false;
     const T=TILE,R=this.r,s=Math.sign(dv);
@@ -83,6 +83,7 @@ class Fighter{
     if(!this.alive||this.invinc>0) return;
     this.hearts--; sfxShrink();
     if(this.hearts<=0){ this.alive=false; this.squash=0.7; spawnSparks(this.cx,this.cy,'#ffffff',14);
+      game.rings.push({x:this.cx,y:this.cy,t:0.45,max:0.45}); sfxKO();
       for(const b of game.bombs){ if(!b.dead&&b.owner===this.idx&&b.remote){ b.remote=false; } } }
     else { this.invinc=2.2; spawnSparks(this.cx,this.cy,'#ffd23a',10); }
   }
@@ -93,9 +94,12 @@ class Fighter{
     else if(t==='kick') this.kick=true;
     else if(t==='pierce') this.pierce=true;
     else if(t==='remote') this.remote=true;
+    else if(t==='wallpass') this.wallpass=true;
+    else if(t==='bombpass') this.bombpass=true;
+    else if(t==='heart'){ this.maxHearts=Math.min(5,this.maxHearts+1); this.hearts=Math.min(this.maxHearts,this.hearts+1); }
     sfxPick();
     if(this.idx===0){
-      const lbl={bomb:'ボム+1',fire:'ファイア+1',speed:'スピード+1',kick:'キック！',pierce:'つらぬき！',remote:'リモコン！'}[t]||'';
+      const lbl={bomb:'ボム+1',fire:'ファイア+1',speed:'スピード+1',kick:'キック！',pierce:'つらぬき！',remote:'リモコン！',wallpass:'かべすり抜け！',bombpass:'ボムすり抜け！',heart:'ハート+1'}[t]||'';
       pushPop(this.cx,this.cy-12, lbl);
     }
   }
@@ -136,14 +140,14 @@ function bombSlideClear(x,y,self){
   return true;
 }
 function blastCellsFor(tx,ty,range,pierce){
-  const cells=[{tx,ty,o:'c',end:false}];
+  const cells=[{tx,ty,o:'c',end:false,dx:0,dy:0}];
   const dirs=[[1,0,'h'],[-1,0,'h'],[0,1,'v'],[0,-1,'v']];
   for(const [dx,dy,o] of dirs){
     for(let i=1;i<=range;i++){
       const x=tx+dx*i,y=ty+dy*i, ch=bget(x,y);
       if(ch==='#') break;
-      if(ch==='B'){ cells.push({tx:x,ty:y,o,end:!pierce,soft:true}); if(pierce) continue; break; }
-      const cell={tx:x,ty:y,o,end:i===range}; cells.push(cell);
+      if(ch==='B'){ cells.push({tx:x,ty:y,o,end:!pierce,soft:true,dx,dy}); if(pierce) continue; break; }
+      const cell={tx:x,ty:y,o,end:i===range,dx,dy}; cells.push(cell);
       if(bombAt(x,y)){ cell.end=true; break; }
     }
   }
@@ -151,9 +155,10 @@ function blastCellsFor(tx,ty,range,pierce){
 }
 function explodeBomb(b){
   if(b.dead) return; b.dead=true; sfxBoom();
+  game.shake=Math.min(6, 2.6+b.range*0.5);
   const cells=blastCellsFor(b.tx,b.ty,b.range,b.pierce);
   for(const c of cells){
-    if(c.soft){ bset(c.tx,c.ty,' '); spawnDebris(c.tx,c.ty); if(Math.random()<ITEM_RATE) spawnRandomItem(c.tx,c.ty); }
+    if(c.soft){ bset(c.tx,c.ty,' '); game.burns.push({tx:c.tx,ty:c.ty,t:0.38,max:0.38}); spawnDebris(c.tx,c.ty); if(Math.random()<ITEM_RATE) spawnRandomItem(c.tx,c.ty); }
     const ob=bombAt(c.tx,c.ty); if(ob&&ob!==b&&!ob.dead){ ob.remote=false; ob.t=Math.min(ob.t,0.08); }
     const it=itemAt(c.tx,c.ty); if(it){ it.dead=true; spawnSparks(c.tx*TILE+8,c.ty*TILE+8,'#ffffff',5); }
   }
@@ -167,8 +172,17 @@ class Item{
 }
 function spawnRandomItem(tx,ty){
   const r=Math.random();
-  // core items stay common; the three abilities are rarer one-time pickups
-  const type = r<0.26?'bomb' : r<0.52?'fire' : r<0.70?'speed' : r<0.80?'kick' : r<0.90?'pierce' : 'remote';
+  // core power-ups stay common; the special abilities are rarer one-time pickups
+  let type;
+  if(r<0.20) type='bomb';
+  else if(r<0.40) type='fire';
+  else if(r<0.55) type='speed';
+  else if(r<0.64) type='kick';
+  else if(r<0.73) type='pierce';
+  else if(r<0.81) type='remote';
+  else if(r<0.88) type='wallpass';
+  else if(r<0.94) type='bombpass';
+  else type='heart';
   game.items.push(new Item(tx,ty,type));
 }
 

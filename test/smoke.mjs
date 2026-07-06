@@ -48,10 +48,11 @@ function assert(c,msg){ if(!c) throw new Error('assert failed: '+msg); }
 
 async function partA(){
   makeEnv();
-  const { STEP, DIFFICULTY, ENEMIES, BOSS_PLAYER_HEARTS, CHARS, START_FIRE } = await import('../src/core/constants.js');
+  const { STEP, DIFFICULTY, ENEMIES, BOSS_PLAYER_HEARTS, CHARS, START_FIRE, TILE } = await import('../src/core/constants.js');
   const { input } = await import('../src/core/input.js');
   const { game } = await import('../src/game/state.js');
   const { bget, bset } = await import('../src/game/board.js');
+  const { cpuUpdate } = await import('../src/game/ai.js');
   const E = await import('../src/game/entities.js');
   const flow = await import('../src/game/flow.js');
   const { scenes } = await import('../src/scenes/SceneManager.js');
@@ -280,6 +281,96 @@ async function partA(){
   assert(game.state==='battle','confirming a character starts the battle');
   assert(game.fighters[0].pal.key==='sora','battle uses the confirmed character');
   clearInput();
+
+  // ---- new items: wallpass / bombpass / heart ----
+  game.save.charSel=1; flow.startMatch({seed:3});
+  const pit=game.fighters[0];
+  bset(2,1,'B');
+  pit.wallpass=false; assert(pit.canPass(2,1)===false,'soft block is solid without wallpass');
+  pit.applyItem('wallpass'); assert(pit.wallpass===true&&pit.canPass(2,1)===true,'wallpass walks through soft blocks');
+  bset(5,1,' '); game.bombs.length=0;
+  game.bombs.push({tx:5,ty:1,owner:9,dead:false,sliding:false,t:1,range:1,pierce:false});
+  pit.bombpass=false; assert(pit.canPass(5,1)===false,'bomb is solid without bombpass');
+  pit.applyItem('bombpass'); assert(pit.bombpass===true&&pit.canPass(5,1)===true,'bombpass walks through bombs');
+  const mh0=pit.maxHearts; pit.applyItem('heart'); assert(pit.maxHearts===Math.min(5,mh0+1),'heart raises max hearts');
+  game.bombs.length=0;
+
+  // ---- AI no longer walks into danger (the self-death fix) ----
+  clearInput();
+  flow.startMatch({seed:5}); game.phase='play';
+  const cpu=game.fighters[1];
+  cpu.cx=cpu.tx*TILE+TILE/2; cpu.cy=cpu.ty*TILE+TILE/2; cpu.path=null; cpu.aiT=999; cpu.wantBomb=false;
+  // (a) standing on a doomed tile with one safe neighbour -> flee toward it ([tx-1,ty])
+  game.bombs.length=0; game.blasts.length=0;
+  game.bombs.push({tx:cpu.tx,ty:cpu.ty-1,owner:9,dead:false,sliding:false,t:0.5,range:1,pierce:false});
+  const mv=cpuUpdate(cpu,0.016);
+  assert(mv.dx===-1&&mv.dy===0,'CPU flees its own blast toward the safe tile');
+  // (b) safe, with a dangerous neighbour -> never step into it
+  cpu.aiT=999; cpu.path=null; game.bombs.length=0; game.blasts.length=0;
+  game.bombs.push({tx:cpu.tx-2,ty:cpu.ty,owner:9,dead:false,sliding:false,t:0.5,range:1,pierce:false});
+  let stepped=false;
+  for(let k=0;k<40;k++){ const m=cpuUpdate(cpu,0.016); if(m.dx===-1&&m.dy===0) stepped=true; }
+  assert(!stepped,'CPU never steps into an imminent blast');
+  game.bombs.length=0; game.blasts.length=0; clearInput();
+
+  // ---- classic polish: blast direction data + burn-away FX ----
+  game.save.charSel=1; flow.startMatch({seed:3}); game.phase='play';
+  const bcs=E.blastCellsFor(3,3,2,false);
+  assert(bcs[0].dx===0&&bcs[0].dy===0,'blast center carries dx/dy');
+  assert(bcs.slice(1).every(c=>c.dx!==undefined&&c.dy!==undefined),'blast arms carry direction');
+  {
+    const pb=game.fighters[0];
+    // detonate a bomb next to a soft box → burn animation entry appears
+    let sx=-1,sy=-1;
+    outer: for(let yy=1;yy<12;yy++) for(let xx=1;xx<14;xx++){
+      if(bget(xx,yy)===' '&&(bget(xx+1,yy)==='B'||bget(xx-1,yy)==='B'||bget(xx,yy+1)==='B'||bget(xx,yy-1)==='B')){ sx=xx; sy=yy; break outer; }
+    }
+    assert(sx>0,'found a spot next to a soft box');
+    game.burns.length=0;
+    E.explodeBomb({tx:sx,ty:sy,owner:0,range:2,pierce:false,dead:false,t:0});
+    assert(game.burns.length>0,'destroying a box spawns a burn-away animation');
+    assert(game.shake>0,'explosions shake the screen');
+    game.blasts.length=0; game.burns.length=0; game.shake=0;
+  }
+
+  // ---- classic 4-way movement: newest press wins, no diagonals ----
+  clearInput();
+  flow.startMatch({seed:9}); game.phase='play';
+  const p4=game.fighters[0];
+  const sx4=p4.cx, sy4=p4.cy;
+  input.right=true; scenes.update(STEP);        // press → moves right
+  input.down=true; scenes.update(STEP); scenes.update(STEP);  // newer press: down wins
+  assert(p4.cy>sy4,'newest press (down) takes over');
+  const cxAfterDown=p4.cx;
+  scenes.update(STEP);
+  assert(Math.abs(p4.cx-cxAfterDown)<0.0001,'no diagonal drift while both keys held');
+  clearInput();
+
+  // ---- sudden death (いそげ！) ----
+  flow.startMatch({seed:5}); game.phase='play';
+  assert(game.hurry===null,'no sudden death at round start');
+  game.time=44.9; scenes.update(STEP);
+  assert(game.hurry&&game.hurry.seq.length>0,'sudden death activates at 45s');
+  assert(game.banner&&game.banner.text.includes('いそげ'),'いそげ banner shows');
+  assert(game.hurry.seq.every(([x,y])=>bget(x,y)!=='#'),'spiral skips pillar tiles');
+  {
+    const h=game.hurry;
+    const [fx,fy]=h.seq[0];
+    // place a CPU + a bomb + an item on the first falling tile → all crushed
+    const victim=game.fighters[1];
+    victim.cx=fx*TILE+TILE/2; victim.cy=fy*TILE+TILE/2; victim.invinc=99;
+    game.bombs.push({tx:fx,ty:fy,owner:0,dead:false,sliding:false,t:9,range:1,pierce:false,update(){}});
+    h.t=0.0001; scenes.update(STEP);
+    assert(bget(fx,fy)==='#','fallen block becomes a hard wall');
+    assert(!victim.alive,'a fighter under the block is crushed (even invincible)');
+    assert(game.bombs.every(b=>!(b.tx===fx&&b.ty===fy&&!b.dead)),'bombs under the block are removed');
+    assert(game.drops.length>0,'block landing animation spawned');
+  }
+  // boss mode never gets sudden death
+  flow.startMatch({seed:5,boss:true}); game.phase='play';
+  game.time=30; scenes.update(STEP);
+  assert(game.hurry===null,'boss battles have no sudden death');
+  game.state='title'; scenes.update(STEP); clearInput();
 
   // render every world and overlay state
   assert((await import('../src/core/constants.js')).THEMES.length===5,'5 worlds defined');
